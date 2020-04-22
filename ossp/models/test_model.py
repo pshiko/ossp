@@ -1,5 +1,5 @@
-from ossp.data.job import JobInstance
-from ossp.models.model import OSSP
+from ..data.job import JobInstance
+from .model import OSSP
 
 test_jobs = [
     JobInstance(job_id=0, process_duration=466, limit=76, job_name='A'),
@@ -19,6 +19,7 @@ def test_minimize_delayed_time():
     print(f'status: {status}')
     print(f'results: {results}')
     print(f'objective: {obj_var}')
+    assert obj_var == sum([job.delay for job in results])
 
 
 def test_minimize_maximum_delayed_time():
@@ -28,3 +29,4 @@ def test_minimize_maximum_delayed_time():
     print(f'status: {status}')
     print(f'results: {results}')
     print(f'objective: {obj_var}')
+    assert obj_var == max([job.delay for job in results])

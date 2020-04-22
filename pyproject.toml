@@ -5,7 +5,7 @@ description = "solve open shop scheduling problem using ortools"
 authors = ["pshiko <pshiko.sparrow@gmail.com>"]
 
 [tool.poetry.dependencies]
-python = "^3.8"
+python = "^3.7"
 ortools = "^7.5.7466"
 pandas = "^1.0.3"
 numpy = "^1.18.2"

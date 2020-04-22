@@ -3,7 +3,7 @@ from typing import List, Optional
 
 from ortools.sat.python import cp_model
 
-from ossp.data.job import JobInstance, JobVar, AssignedJob
+from ..data.job import JobInstance, JobVar, AssignedJob
 
 logger = getLogger(__name__)
 sh = StreamHandler()
@@ -14,35 +14,6 @@ sh.setLevel(INFO)
 logger.addHandler(sh)
 
 
-class OSSPSolutionPrinter(cp_model.CpSolverSolutionCallback):
-    def __init__(self, job_vars: List[JobVar]):
-        super().__init__()
-        self.solution_count = 0
-        self.solutions: List[List[AssignedJob]] = []
-        self.job_vars = job_vars
-
-    def on_solution_callback(self):
-        self.solution_count += 1
-        assigned_jobs = []
-        for job_var in self.job_vars:
-            assigned_jobs.append(
-                AssignedJob(
-                    job_id=job_var.job_id,
-                    start=self.Value(job_var.start),
-                    end=self.Value(job_var.end),
-                    delay=self.Value(job_var.delay),
-                    limit=self.Value(job_var.limit),
-                    release=job_var.release,
-                    assigned_flags=[self.Value(flag) for flag in job_var.assigned_flags],
-                    job_name=job_var.job_name,
-                )
-            )
-        self.solutions.append(assigned_jobs)
-
-    def solution_count(self):
-        return self.solution_count
-
-
 class OSSP:
     def __init__(self, machine_nums: int = 2):
         self.model: Optional[cp_model.CpModel] = None
@@ -51,7 +22,6 @@ class OSSP:
         self.horizon: Optional[int] = None
         self.machine_nums: int = machine_nums
         self.solver = cp_model.CpSolver()
-        self.solution_callbacks: Optional[OSSPSolutionPrinter] = None
 
     def add_job_instance(self, job: JobInstance):
         self.job_instances.append(job)
@@ -127,17 +97,33 @@ class OSSP:
         for job in self.job_instances:
             self._add_job_var(job)
         self.build_constrain()
-        self.solution_callbacks = OSSPSolutionPrinter(self.job_vars)
+
+    def _get_assigned_jobs(self) -> List[AssignedJob]:
+        results: List[AssignedJob] = []
+        for job_var in self.job_vars:
+            results.append(
+                AssignedJob(
+                    job_id=job_var.job_id,
+                    start=self.solver.Value(job_var.start),
+                    end=self.solver.Value(job_var.end),
+                    delay=self.solver.Value(job_var.delay),
+                    limit=self.solver.Value(job_var.limit),
+                    release=job_var.release,
+                    assigned_flags=[self.solver.Value(flag) for flag in job_var.assigned_flags],
+                    job_name=job_var.job_name,
+                )
+            )
+        return results
 
     def minimize_delayed_time(self) -> (str, List[AssignedJob], int):
         self._initialize_model()
+        objective_var = sum([job.delay for job in self.job_vars])
         self.model.Minimize(
-            sum([job.delay for job in self.job_vars])
+            objective_var
         )
-        status = self.solver.SolveWithSolutionCallback(self.model, self.solution_callbacks)
-        result = self.solution_callbacks.solutions[0]
-        objective_value = self.solver.ObjectiveValue()
-        return self.solver.StatusName(status), result, objective_value
+        status = self.solver.Solve(self.model)
+        results = self._get_assigned_jobs()
+        return self.solver.StatusName(status), results, self.solver.Value(objective_var)
 
     def minimize_maximum_delayed_time(self) -> (str, List[AssignedJob], int):
         self._initialize_model()
@@ -148,7 +134,7 @@ class OSSP:
         )
         self.model.Minimize(objective_var)
 
-        status = self.solver.SolveWithSolutionCallback(self.model, self.solution_callbacks)
-        result = self.solution_callbacks.solutions[0]
+        status = self.solver.Solve(self.model)
+        result = self._get_assigned_jobs()
         objective_value = self.solver.ObjectiveValue()
         return self.solver.StatusName(status), result, objective_value
